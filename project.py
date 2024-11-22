@@ -164,70 +164,59 @@ initial values of a patient are as follows:
     
 """
     
-def create_patient():
-    
-    global patient_number
-    patient_name = patient_number
-    patient_number += 1
-    
-    priority = np.random.randint(PRIORITY_LOWER_BOUND, PRIORITY_UPPER_BOUND + 1)
-    allowed_waiting_time = priority if priority <= EMERGENCY_THRESHOLD else NON_EMERGENCY_ALLOWED_WAITING_TIME
-    service_time = max(1, round(np.random.exponential(scale=SERVICE_TIME_LAMBDA_PARAM)))
-    
-    
-    patient = {'name': patient_name,
-               'priority': priority,
-               'allowed_waiting_time': allowed_waiting_time,
-               'service_time': service_time}
-    
-    return patient
+class Patient:
+    def __init__(self, name, priority, allowed_waiting_time, service_time):
+        self.name = name
+        self.priority = priority
+        self.allowed_waiting_time = allowed_waiting_time
+        self.service_time = service_time
+        self.hospital_arrival_time = None
+        self.desk_arrival_time = None
+        self.exit_time = None
+        self.waiting_time = None
 
+    @staticmethod
+    def create_patient():
+        """
+        Factory method to create a patient with randomized attributes.
+        """
+        global patient_number
+        name = patient_number
+        patient_number += 1
+        priority = np.random.randint(PRIORITY_LOWER_BOUND, PRIORITY_UPPER_BOUND + 1)
+        allowed_waiting_time = (
+            priority if priority <= EMERGENCY_THRESHOLD else NON_EMERGENCY_ALLOWED_WAITING_TIME
+        )
+        service_time = max(1, round(np.random.exponential(scale=SERVICE_TIME_LAMBDA_PARAM)))
+        return Patient(name, priority, allowed_waiting_time, service_time)
 
-"""
-There are three stages of a patient overall state in the hospital. Once they arrive in the hospital and are waiting to
-be serviced, once they get to a desk and are visited, and once they leave the hospital. each state has a separate
-method which is as follows:
+    def hospital_arrival(self, env, waiting_queue):
+        """
+        Handles the arrival of the patient at the hospital.
+        """
+        waiting_queue.append(self.name)
+        check_simulation_conditions(waiting_queue=waiting_queue, queue_maximum_capacity=WAITING_LINE_CAPACITY)
+        self.hospital_arrival_time = env.now
+        print(arrival_message(self.__dict__))
 
-    1. patient_hospital_arrival(env):
-    The patient is created and is assigned the initial values that we have discussed. Their name then enters the 
-    waiting queue. We have to immediately check for the waiting queue failure after that to see whether we have 
-    exceeded the hospital waiting line capacity. Finally, a new attribute is assigned to the patient (hospital_arrival_time) 
-    
-    2. patient_desk_arrival(env, patient):
-    The patient is going to be visited at this point; hence, we can assign two new attributes to them. desk_arrival_time
-    which is self-explanatory. Then we can calculate the most important attribute of the patient which is their waiting 
-    time. It is equal to the time difference between when they entered the hospital and the time that they were examined
-    by a doctor. This important value is stored in the waiting_times list to be analyzed later. Now that we have the 
-    patient's waiting time, we can check whether they have been kept waiting longer than we are allowed to. If we don't
-    have a failure, we continue with the simulation and remove the patient from the waiting queue.
-    
-    3. patient_hospital_exit(env, patient): 
-    Patient has been visited and leaves the hospital. A new attribute (exit_time) is used to store the patient's exit
-    time from the hospital
-"""
+    def desk_arrival(self, env, waiting_queue, waiting_times):
+        """
+        Handles the arrival of the patient at a service desk.
+        """
+        self.desk_arrival_time = env.now
+        print(arrived_at_desk_message(self.__dict__))
+        self.waiting_time = self.desk_arrival_time - self.hospital_arrival_time
+        waiting_times.append(self.waiting_time)
+        check_simulation_conditions(patient=self.__dict__)
+        waiting_queue.remove(self.name)
 
-def patient_hospital_arrival(env):
-    patient = create_patient()
-    waiting_queue.append(patient['name'])
-    check_simulation_conditions(waiting_queue=waiting_queue, queue_maximum_capacity=WAITING_LINE_CAPACITY)
-    patient['hospital_arrival_time'] = env.now
-    print(arrival_message(patient))
-    return patient
+    def hospital_exit(self, env):
+        """
+        Handles the patient's exit from the hospital.
+        """
+        self.exit_time = env.now
+        print(exit_hospital_message(self.__dict__))
 
-def patient_desk_arrival(env, patient):
-    patient['desk_arrival_time'] = env.now
-    print(arrived_at_desk_message(patient))
-    patient['waiting_time'] = patient['desk_arrival_time'] - patient['hospital_arrival_time']
-    waiting_times.append(patient['waiting_time'])
-    check_simulation_conditions(patient=patient)
-    waiting_queue.remove(patient['name'])
-
-    
-def patient_hospital_exit(env, patient):
-    
-    patient['exit_time'] = env.now
-    print(exit_hospital_message(patient))
-    
 
 """
 The three explained states of a patient in the hospital are implemented in this method. Hospital as the environment
@@ -239,19 +228,14 @@ time. Finally, the patient leaves the hospital.
 """
 
 def patient_process(env, hospital):
-    
-    patient = patient_hospital_arrival(env)
-    
-    with hospital.desks.request(priority=patient['priority']) as request:
-        
-        yield request
-        
-        patient_desk_arrival(env, patient)
-        
-        yield env.process(hospital.service(patient['service_time']))
-        
-        patient_hospital_exit(env, patient)
+    patient = Patient.create_patient()
+    patient.hospital_arrival(env, waiting_queue)
 
+    with hospital.desks.request(priority=patient.priority) as request:
+        yield request
+        patient.desk_arrival(env, waiting_queue, waiting_times)
+        yield env.process(hospital.service(patient.service_time))
+        patient.hospital_exit(env)
 
 """
 An object of hospital class is created with the desired number of desks. The patient_process method is constantly
