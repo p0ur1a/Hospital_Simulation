@@ -10,6 +10,8 @@ from messages import (arrival_message, arrived_at_desk_message,
                       failure_message, exit_hospital_message, success_message,
                       run_number_message, waiting_line_capacity_failure_message)
 
+
+
 np.random.seed(10)
 
 
@@ -56,7 +58,7 @@ PRIORITY_LOWER_BOUND, PRIORITY_UPPER_BOUND = 1, 10
 EMERGENCY_THRESHOLD = 5
 NON_EMERGENCY_ALLOWED_WAITING_TIME = 60
 WAITING_LINE_CAPACITY = 10
-SIMULATION_TIME = 10
+SIMULATION_TIME = 2000
 
 INTERARRIVAL_RATE_LAMBDA_PARAM = 0.76
 SERVICE_TIME_LAMBDA_PARAM = 15
@@ -140,31 +142,36 @@ we have encountered any of them:
    of desks are enough and we practically have solved the problem. 
 """
     
-def check_patient_waiting_time_failure(patient):
-    
-    if patient['allowed_waiting_time'] < patient['waiting_time']:
-        
-        print(failure_message(patient)) 
-        
+def check_simulation_conditions(patient=None, waiting_queue=None, queue_maximum_capacity=None, env=None):
+    """
+    Checks various failure or success conditions in the simulation.
+
+    Parameters:
+    - patient (dict): Dictionary with 'allowed_waiting_time' and 'waiting_time' keys.
+    - waiting_queue (list): List representing the hospital's waiting queue.
+    - queue_maximum_capacity (int): Maximum capacity of the waiting queue.
+    - env (SimPy Environment): Simulation environment to check the current time.
+    """
+    global success
+
+    if patient and patient['allowed_waiting_time'] < patient['waiting_time']:
+        print(failure_message(patient))
         stop_simulation.succeed()
         simulations_stop_causes.append(STOP_TRIGGERS['patient_waiting_time_failure'])
-        
-def check_hospital_waiting_queue_failure(waiting_queue, queue_maximum_capacity):
-    
-    if len(waiting_queue) > queue_maximum_capacity:
+        return
+
+    if waiting_queue is not None and len(waiting_queue) > queue_maximum_capacity:
         print(waiting_line_capacity_failure_message())
-        
         stop_simulation.succeed()
         simulations_stop_causes.append(STOP_TRIGGERS['waiting_queue_failure'])
-        
-def check_success(env):
-    
-    global success
-    
-    if env.now > SIMULATION_TIME:
+        return
+
+    if env and env.now > SIMULATION_TIME:
         stop_simulation.succeed()
         success = True
         simulations_stop_causes.append(STOP_TRIGGERS['success'])
+
+
         
         
 """
@@ -233,28 +240,21 @@ method which is as follows:
 """
 
 def patient_hospital_arrival(env):
-    
     patient = create_patient()
-    
     waiting_queue.append(patient['name'])
-    check_hospital_waiting_queue_failure(waiting_queue, WAITING_LINE_CAPACITY)
-    
+    check_simulation_conditions(waiting_queue=waiting_queue, queue_maximum_capacity=WAITING_LINE_CAPACITY)
     patient['hospital_arrival_time'] = env.now
     print(arrival_message(patient))
-    
     return patient
 
 def patient_desk_arrival(env, patient):
-    
     patient['desk_arrival_time'] = env.now
     print(arrived_at_desk_message(patient))
-        
     patient['waiting_time'] = patient['desk_arrival_time'] - patient['hospital_arrival_time']
     waiting_times.append(patient['waiting_time'])
-        
-    check_patient_waiting_time_failure(patient)
-        
+    check_simulation_conditions(patient=patient)
     waiting_queue.remove(patient['name'])
+
     
 def patient_hospital_exit(env, patient):
     
@@ -293,17 +293,12 @@ calculated using the exponential distribution with the lambda parameter of INTER
 """
     
 def setup(env, num_desks):
-    
     hospital = Hospital(env, num_desks)
-    
     while True:
-             
         env.process(patient_process(env, hospital))
         interarrival_rate = max(1, round(np.random.exponential(scale=INTERARRIVAL_RATE_LAMBDA_PARAM)))
-        
-        check_success(env)
-            
-        yield env.timeout(interarrival_rate)        
+        check_simulation_conditions(env=env)
+        yield env.timeout(interarrival_rate)  
         
     
 """
