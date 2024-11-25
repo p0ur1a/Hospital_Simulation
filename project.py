@@ -90,22 +90,19 @@ class Hospital:
 
 
 """
-There are three reasons for stopping the simulation. Three methods have been written to check whether
+There are three reasons for stopping the simulation. the following method has been written to check whether
 we have encountered any of them:
 
-    1. check_patient_waiting_time_failure(patient): 
-    allowed waiting time of the patient is assigned to them once they arrive in the hospital, and is 
+    1. allowed waiting time of the patient is assigned to them once they arrive in the hospital, and is 
     based on their priority. Their actual waiting time is calculated once they get to a service desk. 
     If a patient is kept waiting more than we are allowed to, it means we have failed and we need at  
     least one more desk; hence, the simulation is stopped.
     
-    2. check_hospital_waiting_queue_failure(waiting_queue, queue_maximum_capacity):
-    In some cases, the capacity of a hospital waiting line is limited. So every time a patient arrives,
+    2. In some cases, the capacity of a hospital waiting line is limited. So every time a patient arrives,
     we should check to see if we have reached the capacity. If so, it means the number of hospital's 
     service desks was not sufficient to visit the patients.
     
-   3. check_success(env):
-   If we have reached the end of our simulation time unit and have not had any failures, the current number
+   3. If we have reached the end of our simulation time unit and have not had any failures, the current number
    of desks are enough and we practically have solved the problem. 
 """
     
@@ -145,7 +142,7 @@ def check_simulation_conditions(patient=None, waiting_queue=None, queue_maximum_
 The arrival of patients in a simulation means creating them and assigning them the necessary  values. The 
 initial values of a patient are as follows:
 
-    1. patient_name: For better comprehension, we have assigned a number to each patient as their name. This
+    1. name: For better comprehension, we have assigned a number to each patient as their name. This
     could prove useful in debugging and checking the flow of the simulation to see which state each patient 
     is in.
     
@@ -272,17 +269,48 @@ def reset_simulation_variables(waiting_queue, waiting_times):
     print(run_number_message(number_of_desks))
 
 
-while success == False:
+# while success == False:
         
-    reset_simulation_variables(waiting_queue, waiting_times)
-    stop_simulation = env.event()
-    env.process(setup(env, num_desks=number_of_desks))
-    env.run(until=stop_simulation)
+#     reset_simulation_variables(waiting_queue, waiting_times)
+#     stop_simulation = env.event()
+#     env.process(setup(env, num_desks=number_of_desks))
+#     env.run(until=stop_simulation)
 
-    average_waiting_times.append(round(sum(waiting_times)/len(waiting_times), 2))
+#     average_waiting_times.append(round(sum(waiting_times)/len(waiting_times), 2))
     
-    number_of_desks += 1
+#     number_of_desks += 1
  
-print(success_message(number_of_desks - 1))
+# print(success_message(number_of_desks - 1))
 
-plot_average_waiting_times(average_waiting_times, simulations_stop_causes)
+# plot_average_waiting_times(average_waiting_times, simulations_stop_causes)
+
+def run_simulation():
+    """
+    Main method to run the simulation until success is achieved.
+    It resets variables, starts the setup process, and handles simulation runs.
+    """
+    global success, number_of_desks, stop_simulation
+
+    while not success:
+        # Reset necessary variables and prepare the simulation environment
+        reset_simulation_variables(waiting_queue, waiting_times)
+        stop_simulation = env.event()
+        
+        # Start the setup process and run the simulation
+        env.process(setup(env, num_desks=number_of_desks))
+        env.run(until=stop_simulation)
+        
+        # Calculate the average waiting time for this run
+        average_waiting_times.append(round(sum(waiting_times) / len(waiting_times), 2))
+        
+        # Increment the number of desks for the next simulation run
+        number_of_desks += 1
+
+    # Final message and visualization
+    print(success_message(number_of_desks - 1))
+    plot_average_waiting_times(average_waiting_times, simulations_stop_causes)
+
+
+# Run the simulation
+if __name__ == "__main__":
+    run_simulation()
